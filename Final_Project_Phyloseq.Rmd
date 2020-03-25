@@ -1,0 +1,186 @@
+---
+title: "Towards Examining the Role of the Gut Microbiome in the Link Between PrenatalStress and Psychopathology: An Initial Exploration of Gut Microbiome Composition"
+author: "Brooke McKenna"
+date: "3/25/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Exposure to prenatal stress has been linked to a variety of psychological disorders across development. Robust evidence suggests that dysregulation of the hypothalamic-pituitary-adrenal (HPA) axis, one of the best studied systems involved in the stress response, plays an important mechanistic role in this association. Both human and animal studies have identified an impact of prenatal stress exposure on HPA-axis functioning and in turn an influence of HPA-axis dysfunction on psychopathology from early childhood to adulthood. These influences have been demonstrated across the lifespan, but evidence suggests that stress exposure during sensitive periods, such as pregnancy, may have particularly detrimental effects. 
+
+Importantly, additional biological factors – such as an individual’s gut microbiome composition – have been suggested to influence the associations between stress, HPA-axis functioning, and psychopathology. The gut microbiome has demonstrated a bidirectional communication with the brain (commonly referred to as the microbiome-gut-brain axis) that implicates a combination of stress-response systems, including the HPA-axis. Preliminary studies have demonstrated individual associations between environmental stress, the gut microbiome, and psychopathology. These preliminary studies also indicated that a “healthy” gut microbiome composition – e.g., greater relative abundances of protective microbiome species, such as Lactobacillus and Bifidobacterium – can buffer against the negative effects of stress on psychopathology. This evidence highlights the exciting potential that the gut microbiome may be a predictor of psychopathology and a target for clinical prevention and/or intervention. 
+
+Much of this evidence, however, stems from animal research, with few studies examining these relationships in humans and even fewer focusing on periods of development that may be particularly sensitive to stress. The proposed study intends to take a first step in filling these important gaps by leveraging publically-available data from the Human Microbiome Project to explore between-subject differences in gut microbiome composition. 
+
+## Research Aims
+
+*Aim 1:* Explore the relative abundance of microbes at the phylum, family, and genus levels. 
+
+  _Hypothesis 1:_ We will observe substantial between-subjects variability in the relative abundance of bacteria at each level of analysis.
+
+*Aim 2:* Explore the alpha and beta diversity of microbes.
+
+  _Hypothesis 2:_ We will observe substantial variability in the alpha and beta diversities between individuals.
+
+## Data
+
+Pre-processed data was downloaded from the Human Microbiome Project.
+
+```{r}
+# Load all packages
+library(phyloseq)
+library(ggplot2) 
+library(RColorBrewer)
+
+#Load data
+load("~/Desktop/MyGitHub/N741Spring2020_homework05_phyloseq-bgmckenna/HMPv35.RData")
+
+summary(sample_data(HMPv35))
+
+```
+
+This dataset comprises 319 individuals who have gut microbiome (i.e., stool) data available. 
+
+To start, I created a subset so that I'm only working with gut microbiome data.
+
+```{r}
+#Subset 
+sub <- get_variable(HMPv35, "HMPbodysubsite") %in% c("Stool")
+
+sample_data(HMPv35)$sub <- factor(sub)
+
+HMPv35sub <- prune_samples(sample_data(HMPv35)$sub == TRUE, HMPv35)
+
+summary(sample_data(HMPv35sub))
+
+HMPv35sub
+```
+
+## Exploratory Analyses & Results
+
+*I. RELATIVE ABUNDANCES*
+
+For my Aim 1 analyses, I first explored what phyla are most highly represented in the 319 samples. Since there are over 45000 taxa represented, I narrowed it down to the top 20.
+
+```{r}
+#Calclate number of taxa in object
+ntaxa(HMPv35sub)
+
+par(mar = c(10, 4, 4, 2) + 0.1)
+N <- 20
+barplot(sort(taxa_sums(HMPv35sub), 
+             TRUE)[1:N]/nsamples(HMPv35sub), las=2)
+
+```
+
+Next, I eliminated the rare taxa, which were those that had a low occurence rate throughout all 319 samples.
+
+```{r}
+
+HMPv35subsub = filter_taxa(HMPv35sub, function(x) sum(x > 3) > (0.2*length(x)), TRUE)
+
+# Filter out all taxa that occur in less than .01% of samples
+
+HMPv35subr  <- transform_sample_counts(HMPv35subsub, 
+                                       function(x) x / sum(x))
+HMPv35subfr <- filter_taxa(HMPv35subr, 
+                           function(x) mean(x) > 1e-5, TRUE)
+HMPv35subfr
+
+```
+
+I next plotted the microbe abundances represented in the 319 samples. This was done at the phylum and genus levels.
+
+```{r}
+#Look at relative abundances
+
+title = "Relative Abundances at the Phylum Level"
+plot_bar(HMPv35subfr, 
+         "HMPbodysubsite",
+         "Abundance", 
+         fill = "Phylum",
+         title=title)+geom_bar(stat="identity")
+
+title = "Relative Abundances at the Genus Level"
+plot_bar(HMPv35subfr, 
+         "HMPbodysubsite",
+         "Abundance", 
+         fill = "Genus",
+         title=title)+geom_bar(stat="identity")
+
+```
+
+Finally, I used network science to visually inspect the "proximity" (or similarity) of samples. This provides information about between-subjects variability.
+
+```{r}
+plot_net(HMPv35subfr, 
+         maxdist = 0.3, 
+         color = "sex")
+```
+NOTE: I'm unsure how to interpret this network... (I intend to insert an interpretation for the final project)
+
+
+*II. ALPHA AND BETA DIVERSITIES*
+
+*Alpha-diversity* is used to denote _within_-person diveristy. Diversity at this level (which can be assessed at any level: species, genus, family, etc.) consists of two parts: *richness* and *evenness*. 
+
+- _Richness_: How many different types of units (e.g., species) are there?
+- _Evenness_: How equal are the abundances of the different types?
+
+*Common Measures of Alpha Diversity:*
+
+_Shannon:_ This is a diversity index. Thus, higher levels on the Shannon index reflect greater diversity.
+
+_Simpson:_ This is a similarity index. Thus, higher levels on the Simpson index reflect more similarity, or lower diversity.
+
+
+```{r}
+
+theme_set(theme_bw())
+
+#Plot the different diversity measures for the stool samples
+alpha_meas = c("Shannon", "Simpson")
+
+p <- plot_richness(HMPv35sub, "HMPbodysubsite",
+                   measures=alpha_meas)
+
+p + geom_boxplot(data=p$data, 
+                 aes(x=HMPbodysubsite, y=value, color=NULL), 
+                 alpha=0.1)
+```
+
+Note: (I will insert an interpretation of these plots once I gain a better understanding of their values)
+
+
+*Beta-diversity* refers to _between_-subjects diversity. In other words, how much variability exists between participants. I used ordination to assess this, using the Bray-Curtis dissimilarity index.
+
+```{r}
+
+otu <- otu_table(HMPv35sub)
+ps.prop <- transform_sample_counts(HMPv35sub, function(otu) otu/sum(otu))
+
+# Ordinate with Bray-Curtis
+
+ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
+plot_ordination(HMPv35sub, ord.nmds.bray, title="Bray NMDS")
+```
+
+By visual inspection, we see that the diversity seems to fall along a normal distribution along both the X and Y axes. This suggests that there is substantial variability in gut microbiome composition across subjects, which may be explained by factors such as prenatal exposures.
+
+
+## Results
+
+(Moving forward, I intend to explore sex differences in gut microbiome composition. I will utilize a combination of visualizations and tables in order to present these results.)
+
+
+## Conclusion
+
+Findings from the present study (will likely) demonstrate that gut microbiome composition varies between individuals. (I will then extrapolate on these differences here.) These findings lay the foundation for future human research studies that can examine (1) factors that may explain these individual differences, such as exposure to prenatal stress, (2) outcomes that may result from altered gut microbiome composition, such as psychopathology, and (3) whether the observed variability in individuals' gut microbiome composition may play a role in the association between prenatal stress and psychopathology.
